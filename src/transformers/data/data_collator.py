@@ -116,9 +116,9 @@ class DataCollatorForLanguageModeling:
         labels = inputs.clone()
         # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
         probability_matrix = torch.full(labels.shape, self.mlm_probability)
-        special_tokens_mask = [
-            self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
-        ]
+        special_tokens_mask = [[int(_id in self.tokenizer.all_special_ids) for _id in val]
+                               for val in labels.tolist()]
+
         probability_matrix.masked_fill_(torch.tensor(special_tokens_mask, dtype=torch.bool), value=0.0)
         if self.tokenizer._pad_token is not None:
             padding_mask = labels.eq(self.tokenizer.pad_token_id)
