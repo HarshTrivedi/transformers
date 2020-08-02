@@ -153,8 +153,11 @@ class Trainer:
         args (:class:`~transformers.TrainingArguments`):
             The arguments to tweak training.
         data_collator (:obj:`DataCollator`, `optional`, defaults to :func:`~transformers.default_data_collator`):
-            The function to use to from a batch from a list of elements of :obj:`train_dataset` or
+            The function to use to from a batch from a list of elements of :obj:`train_dataset` and optionally
             :obj:`eval_dataset`.
+        eval_data_collator (:obj:`DataCollator`, `optional`, defaults to `data_collator`):
+            The `data_collator` for validation and test datasets. If not passed, defaults to
+            training data collator.
         train_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
             The dataset to use for training.
         eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
@@ -177,6 +180,7 @@ class Trainer:
         model: PreTrainedModel,
         args: TrainingArguments,
         data_collator: Optional[DataCollator] = None,
+        eval_data_collator: Optional[DataCollator] = None,
         train_dataset: Optional[Dataset] = None,
         eval_dataset: Optional[Dataset] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
@@ -187,6 +191,7 @@ class Trainer:
         self.model = model.to(args.device)
         self.args = args
         self.data_collator = data_collator if data_collator is not None else default_data_collator
+        self.eval_data_collator = eval_data_collator if eval_data_collator else self.data_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.compute_metrics = compute_metrics
@@ -214,15 +219,17 @@ class Trainer:
             # Set an xla_device flag on the model's config.
             # We'll find a more elegant and not need to do this in the future.
             self.model.config.xla_device = True
-        if not callable(self.data_collator) and callable(getattr(self.data_collator, "collate_batch", None)):
-            self.data_collator = self.data_collator.collate_batch
-            warnings.warn(
-                (
-                    "The `data_collator` should now be a simple callable (function, class with `__call__`), classes "
-                    + "with a `collate_batch` are deprecated and won't be supported in a future version."
-                ),
-                FutureWarning,
-            )
+
+        for data_collator in [self.data_collator, self.eval_data_collator]:
+            if not callable(self.data_collator) and callable(getattr(self.data_collator, "collate_batch", None)):
+                self.data_collator = self.data_collator.collate_batch
+                warnings.warn(
+                    (
+                        "The `data_collator` should now be a simple callable (function, class with `__call__`), classes "
+                        + "with a `collate_batch` are deprecated and won't be supported in a future version."
+                    ),
+                    FutureWarning,
+                )
         self.global_step = None
         self.epoch = None
         if self.args.fp16 and _use_native_amp:
@@ -294,7 +301,7 @@ class Trainer:
             eval_dataset,
             sampler=eval_sampler,
             batch_size=self.args.eval_batch_size,
-            collate_fn=self.data_collator,
+            collate_fn=self.eval_data_collator,
             drop_last=self.args.dataloader_drop_last,
         )
 
@@ -318,7 +325,7 @@ class Trainer:
             test_dataset,
             sampler=test_sampler,
             batch_size=self.args.eval_batch_size,
-            collate_fn=self.data_collator,
+            collate_fn=self.eval_data_collator,
             drop_last=self.args.dataloader_drop_last,
         )
 
