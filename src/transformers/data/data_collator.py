@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, NewType, Tuple, Union
+import random
 
 import torch
 from torch.nn.utils.rnn import pad_sequence
@@ -77,6 +78,8 @@ class DataCollatorForLanguageModeling:
     tokenizer: PreTrainedTokenizer
     mlm: bool = True
     mlm_probability: float = 0.15
+    special_mlm: bool = False
+    special_mlm_fraction: float = 0.0
 
     def __call__(self, examples: List[Union[torch.Tensor, Dict[str, torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         if isinstance(examples[0], (dict, BatchEncoding)):
@@ -84,6 +87,12 @@ class DataCollatorForLanguageModeling:
         batch = self._tensorize_batch(examples)
         if self.mlm:
             inputs, labels = self.mask_tokens(batch)
+            return {"input_ids": inputs, "labels": labels}
+        elif self.special_mlm:
+            masking_func = (self.mask_only_additional_special_tokens
+                            if random.random() < self.special_mlm_fraction
+                            else self.mask_tokens)
+            inputs, labels = masking_func(batch)
             return {"input_ids": inputs, "labels": labels}
         else:
             labels = batch.clone().detach()
@@ -138,6 +147,24 @@ class DataCollatorForLanguageModeling:
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
         return inputs, labels
 
+    def mask_only_additional_special_tokens(self, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+
+        if self.tokenizer.mask_token is None:
+            raise ValueError(
+                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the --mlm flag if you want to use this tokenizer."
+            )
+        # Mask only the special tokens that are set in self.tokenizer.additional_special_tokens
+        token2id = lambda token: self.tokenizer.encode(token, add_special_tokens=False)[0]
+        additional_special_ids = [token2id(token)
+                                  for token in self.tokenizer.additional_special_tokens]
+
+        labels = inputs.clone()
+        additional_special_tokens_mask = [[int(_id in additional_special_ids) for _id in val]
+                                          for val in labels.tolist()]
+        masked_indices = torch.tensor(additional_special_tokens_mask, dtype=torch.bool)
+        labels[~masked_indices] = -100  # We only compute loss on masked tokens
+
+        return inputs, labels
 
 @dataclass
 class DataCollatorForPermutationLanguageModeling:
