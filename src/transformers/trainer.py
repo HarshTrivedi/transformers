@@ -560,7 +560,16 @@ class Trainer:
                         self.log(logs)
 
                     if self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
-                        self.evaluate()
+                        metrics = self.evaluate()
+
+                        logger.info(f"Evaluation at global step {self.global_step}:")
+                        for key, value in metrics.items():
+                            logger.info(f"{key} = {value}")
+
+                        metrics_path = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.global_step}_metrics.json")
+                        if self.is_world_process_zero():
+                            with open(metrics_path, "w") as file:
+                                file.write(json.dumps(metrics, indent=4))
 
                     if self.args.save_steps > 0 and self.global_step % self.args.save_steps == 0:
                         # In all cases (even distributed/parallel), self.model is always a reference
