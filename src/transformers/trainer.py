@@ -16,6 +16,7 @@ from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.dataset import Dataset
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler, SequentialSampler
+from torch.nn.utils.rnn import pad_sequence
 from tqdm.auto import tqdm, trange
 
 from .data.data_collator import DataCollator, default_data_collator
@@ -950,14 +951,29 @@ class Trainer:
         if self.args.past_index >= 0:
             self._past = None
 
+        preds_list, label_ids_list = [], []
         for inputs in tqdm(dataloader, desc=description):
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only)
             if loss is not None:
                 eval_losses.append(loss)
             if logits is not None:
-                preds = logits if preds is None else torch.cat((preds, logits), dim=0)
+                preds_list.extend(logits.unbind(dim=0))
             if labels is not None:
-                label_ids = labels if label_ids is None else torch.cat((label_ids, labels), dim=0)
+                label_ids_list.extend(labels.unbind(dim=0))
+
+        if preds_list and len(preds_list[0].shape) == 1:
+            preds = torch.stack(preds_list, dim=0)
+        elif preds_list and len(preds_list[0].shape) == 2:
+            preds = pad_sequence(preds_list, batch_first=True, padding_value = -math.inf)
+        else:
+            raise Exception("Bad shape of predicted logits. Don't know how to handle.")
+
+        if label_ids_list and len(label_ids_list[0].shape) == 0:
+            label_ids = torch.stack(label_ids_list, dim=0)
+        elif label_ids_list and len(label_ids_list[0].shape) == 1:
+            label_ids = pad_sequence(label_ids_list, batch_first=True, padding_value = -100)
+        else:
+            raise Exception("Bad shape of labels. Don't know how to handle.")
 
         if self.args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of the evaluation loop
