@@ -954,17 +954,18 @@ class Trainer:
         preds_list, label_ids_list = [], []
         for inputs in tqdm(dataloader, desc=description):
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only)
+            argmax_logits = torch.argmax(logits, axis=-1)
             if loss is not None:
                 eval_losses.append(loss)
             if logits is not None:
-                preds_list.extend(logits.unbind(dim=0))
+                preds_list.extend(argmax_logits.unbind(dim=0))
             if labels is not None:
                 label_ids_list.extend(labels.unbind(dim=0))
 
-        if preds_list and len(preds_list[0].shape) == 1:
+        if preds_list and len(preds_list[0].shape) == 0:
             preds = torch.stack(preds_list, dim=0)
-        elif preds_list and len(preds_list[0].shape) == 2:
-            preds = pad_sequence(preds_list, batch_first=True, padding_value = -math.inf)
+        elif preds_list and len(preds_list[0].shape) == 1:
+            preds = pad_sequence(preds_list, batch_first=True, padding_value = -100)
         else:
             raise Exception("Bad shape of predicted logits. Don't know how to handle.")
 
