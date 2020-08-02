@@ -85,7 +85,8 @@ class DataCollatorForLanguageModeling:
         if isinstance(examples[0], (dict, BatchEncoding)):
             examples = [e["input_ids"] for e in examples]
         batch = self._tensorize_batch(examples)
-        if self.mlm:
+
+        if self.mlm and not self.special_mlm:
             inputs, labels = self.mask_tokens(batch)
             return {"input_ids": inputs, "labels": labels}
         elif self.special_mlm:
