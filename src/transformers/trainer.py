@@ -500,7 +500,7 @@ class Trainer:
 
         tr_loss = 0.0
         logging_loss = 0.0
-        patience_best_eval_loss = None
+        patience_best_eval_loss = math.inf
         patience_evals_without_improvement = 0
         strop_training = False
         model.zero_grad()
@@ -587,7 +587,7 @@ class Trainer:
 
                         # Keep track of best loss to determine if we should stop early
                         eval_loss = metrics["eval_loss"]
-                        if not patience_best_eval_loss or eval_loss < patience_best_eval_loss:
+                        if eval_loss < patience_best_eval_loss:
                             patience_evals_without_improvement = 0
                             patience_best_eval_loss = eval_loss
 
