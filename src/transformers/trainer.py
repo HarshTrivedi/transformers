@@ -192,6 +192,8 @@ class Trainer:
     ):
         self.model = model.to(args.device)
         self.args = args
+        if self.args.patience > 0 and not self.args.evaluate_during_training:
+            raise ValueError("Patience requires evaluate_during_training.")
         self.data_collator = data_collator if data_collator is not None else default_data_collator
         self.eval_data_collator = eval_data_collator if eval_data_collator else self.data_collator
         self.train_dataset = train_dataset
@@ -498,6 +500,9 @@ class Trainer:
 
         tr_loss = 0.0
         logging_loss = 0.0
+        patience_best_eval_loss = None
+        patience_evals_without_improvement = 0
+        strop_training = False
         model.zero_grad()
         train_iterator = trange(
             epochs_trained, int(num_train_epochs), desc="Epoch", disable=not self.is_local_process_zero()
@@ -580,6 +585,32 @@ class Trainer:
                             with open(metrics_path, "w") as file:
                                 file.write(json.dumps(metrics, indent=4))
 
+                        # Keep track of best loss to determine if we should stop early
+                        eval_loss = metrics["eval_loss"]
+                        if not patience_best_eval_loss or eval_loss < patience_best_eval_loss:
+                            patience_evals_without_improvement = 0
+                            patience_best_eval_loss = eval_loss
+
+                            if hasattr(model, "module"):
+                                assert model.module is self.model
+                            else:
+                                assert model is self.model
+                            # Save model checkpoint
+                            output_dir = os.path.join(self.args.output_dir, f"best")
+                            self.save_model(output_dir)
+
+                            global_step_info_path = os.path.join(output_dir, "global_step.txt")
+                            with open(global_step_info_path, "w") as file:
+                                file.write(f"{self.global_step}")
+
+                        else:
+                            patience_evals_without_improvement += 1
+                            if self.args.patience != -1 and patience_evals_without_improvement >= self.args.patience:
+                                strop_training = True
+                                logger.info(
+                                    f"Patience threshold ({self.args.patience}) exceeded, stopping training"
+                                )
+
                     if self.args.save_steps > 0 and self.global_step % self.args.save_steps == 0:
                         # In all cases (even distributed/parallel), self.model is always a reference
                         # to the model we want to save.
@@ -603,10 +634,10 @@ class Trainer:
                             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
                             torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
 
-                if self.args.max_steps > 0 and self.global_step > self.args.max_steps:
+                if (self.args.max_steps > 0 and self.global_step > self.args.max_steps) or strop_training:
                     epoch_iterator.close()
                     break
-            if self.args.max_steps > 0 and self.global_step > self.args.max_steps:
+            if (self.args.max_steps > 0 and self.global_step > self.args.max_steps) or strop_training:
                 train_iterator.close()
                 break
             if self.args.tpu_metrics_debug or self.args.debug:

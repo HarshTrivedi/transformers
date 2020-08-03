@@ -222,6 +222,16 @@ class TrainingArguments:
         metadata={"help": "If >=0, uses the corresponding part of the output as the past state for next step."},
     )
 
+    patience: int = field(
+        default=-1,
+        metadata={
+            "help": (
+                "If > 0: stops training after evaluating this many times consecutively with non-decreasing loss."
+                "Requires evaluate_during_training."
+            )
+        },
+    )
+
     @property
     def train_batch_size(self) -> int:
         """
