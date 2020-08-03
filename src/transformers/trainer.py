@@ -588,6 +588,8 @@ class Trainer:
                         # Keep track of best loss to determine if we should stop early
                         eval_loss = metrics["eval_loss"]
                         if eval_loss < patience_best_eval_loss:
+                            logger.info(f"Found best validation loss so far. Storing the model.")
+
                             patience_evals_without_improvement = 0
                             patience_best_eval_loss = eval_loss
 
