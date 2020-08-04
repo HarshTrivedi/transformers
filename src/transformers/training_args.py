@@ -231,6 +231,14 @@ class TrainingArguments:
             )
         },
     )
+    patience_metric: str = field(
+        default="-loss",
+        metadata={
+            "help": (
+                "Metric to decide the best checkpoint. Use prefix + if metric should increase, and - otherwise"
+            )
+        },
+    )
 
     @property
     def train_batch_size(self) -> int:

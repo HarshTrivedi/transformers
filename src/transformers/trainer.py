@@ -500,7 +500,10 @@ class Trainer:
 
         tr_loss = 0.0
         logging_loss = 0.0
-        patience_best_eval_loss = math.inf
+        assert args.patience_metric[0] in ["+", "-"]
+        patience_sign = 1.0 if args.patience_metric[0] == "+" else -1.0
+        patience_metric = args.patience_metric[1:]
+        patience_best_eval_metric_value = -patience_sign*math.inf
         patience_evals_without_improvement = 0
         strop_training = False
         model.zero_grad()
@@ -586,12 +589,12 @@ class Trainer:
                                 file.write(json.dumps(metrics, indent=4))
 
                         # Keep track of best loss to determine if we should stop early
-                        eval_loss = metrics["eval_loss"]
-                        if eval_loss < patience_best_eval_loss:
+                        patience_metric_value = metrics[f"eval_{patience_metric}"]
+                        if (patience_sign*patience_metric_value) > (patience_sign*patience_best_eval_metric_value):
                             logger.info(f"Found best validation loss so far. Storing the model.")
 
                             patience_evals_without_improvement = 0
-                            patience_best_eval_loss = eval_loss
+                            patience_best_eval_metric_value = patience_metric_value
 
                             if hasattr(model, "module"):
                                 assert model.module is self.model
