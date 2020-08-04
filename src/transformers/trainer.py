@@ -500,9 +500,9 @@ class Trainer:
 
         tr_loss = 0.0
         logging_loss = 0.0
-        assert args.patience_metric[0] in ["+", "-"]
-        patience_sign = 1.0 if args.patience_metric[0] == "+" else -1.0
-        patience_metric = args.patience_metric[1:]
+        assert self.args.patience_metric[0] in ["+", "-"]
+        patience_sign = 1.0 if self.args.patience_metric[0] == "+" else -1.0
+        patience_metric = self.args.patience_metric[1:]
         patience_best_eval_metric_value = -patience_sign*math.inf
         patience_evals_without_improvement = 0
         strop_training = False
