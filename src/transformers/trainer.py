@@ -869,6 +869,8 @@ class Trainer:
         glob_checkpoints = [str(x) for x in Path(self.args.output_dir).glob(f"{checkpoint_prefix}-*")]
 
         for path in glob_checkpoints:
+            if not os.path.isdir(path):
+                continue
             if use_mtime:
                 ordering_and_checkpoint_path.append((os.path.getmtime(path), path))
             else:
