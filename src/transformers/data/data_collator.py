@@ -164,7 +164,7 @@ class DataCollatorForLanguageModeling:
                                           for val in labels.tolist()]
         masked_indices = torch.tensor(additional_special_tokens_mask, dtype=torch.bool)
 
-        inputs[masked_indices] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
+        inputs[masked_indices] = self.tokenizer.cls_token_id
         labels[~masked_indices] = -100  # We only compute loss on masked tokens
 
         return inputs, labels
