@@ -588,10 +588,10 @@ class Trainer:
                             with open(metrics_path, "w") as file:
                                 file.write(json.dumps(metrics, indent=4))
 
-                        # Keep track of best loss to determine if we should stop early
+                        # Keep track of best patience_metric/loss to determine if we should stop early
                         patience_metric_value = metrics[f"eval_{patience_metric}"]
                         if (patience_sign*patience_metric_value) > (patience_sign*patience_best_eval_metric_value):
-                            logger.info(f"Found best validation loss so far. Storing the model.")
+                            logger.info(f"Found best validation {patience_metric} so far. Storing the model.")
 
                             patience_evals_without_improvement = 0
                             patience_best_eval_metric_value = patience_metric_value
