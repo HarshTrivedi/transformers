@@ -92,10 +92,33 @@ class LineByLineTextDataset(Dataset):
             lines = [line for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
 
         batch_encoding = tokenizer(lines, add_special_tokens=True, truncation=True, max_length=block_size)
-        self.examples = batch_encoding["input_ids"]
+
+        # For WholeWordMasking: Hardcoded for the specific format and for Roberta:
+        # A lot of the coded is hardcoded for Roberta, so better to assure I don't change
+        assert type(tokenizer).__name__ == "RobertaTokenizer"
+
+        list_word_starts = []
+        for ids_ in batch_encoding["input_ids"]:
+            word_starts = []
+            first_non_special_encountered = False
+            for id_ in ids_:
+                token = tokenizer._convert_id_to_token(id_)
+                word_start = True
+                if first_non_special_encountered and \
+                   not str(token).startswith('Ġ') and id_ not in tokenizer.all_special_ids:
+                    word_start = False
+                word_starts.append(word_start)
+
+                # Don't consider the first non-special token to be non-word-start
+                if not first_non_special_encountered and not id_ in tokenizer.all_special_ids:
+                    first_non_special_encountered = True
+            list_word_starts.append(word_starts)
+
+        self.examples = [{"input_ids": input_ids, "word_starts": word_starts}
+                          for input_ids, word_starts in zip(batch_encoding["input_ids"], list_word_starts)]
 
     def __len__(self):
         return len(self.examples)
 
     def __getitem__(self, i) -> torch.Tensor:
-        return torch.tensor(self.examples[i], dtype=torch.long)
+        return {key: torch.tensor(value, dtype=torch.long) for key, value in self.examples[i].items()}
