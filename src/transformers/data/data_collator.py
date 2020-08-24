@@ -114,7 +114,7 @@ class DataCollatorForLanguageModeling:
 
         word_to_wordpiece_indices, wordpiece_to_word_indices = None, None
         if self.whole_word_masking:
-            word_to_wordpiece_indices = [is_word_start.cumsum(dim=0) for is_word_start in word_starts]
+            word_to_wordpiece_indices = [is_word_start.cumsum(dim=0)-1 for is_word_start in word_starts]
             word_to_wordpiece_indices = pad_sequence(word_to_wordpiece_indices, batch_first=True, padding_value=0)
 
             wordpiece_to_word_indices = [is_word_start.nonzero().flatten() for is_word_start in word_starts]
