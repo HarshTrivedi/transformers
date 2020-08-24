@@ -83,35 +83,35 @@ class DataCollatorForLanguageModeling:
 
     def __call__(self, examples: List[Union[torch.Tensor, Dict[str, torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         if isinstance(examples[0], (dict, BatchEncoding)):
-            examples = [e["input_ids"] for e in examples]
-        batch = self._tensorize_batch(examples)
+            input_ids = [e["input_ids"] for e in examples]
+        input_ids = self._tensorize_batch(input_ids)
 
         if self.mlm and not self.special_mlm:
-            inputs, labels = self.mask_tokens(batch)
+            inputs, labels = self.mask_tokens(input_ids)
             return {"input_ids": inputs, "labels": labels}
         elif self.special_mlm:
-            masking_func = (self.mask_only_additional_special_tokens
-                            if random.random() < self.special_mlm_fraction
-                            else self.mask_tokens)
-            inputs, labels = masking_func(batch)
+            if random.random() < self.special_mlm_fraction:
+                inputs, labels = self.mask_only_additional_special_tokens(input_ids)
+            else:
+                inputs, labels = self.mask_tokens(input_ids)
             return {"input_ids": inputs, "labels": labels}
         else:
-            labels = batch.clone().detach()
+            labels = input_ids.clone().detach()
             labels[labels == self.tokenizer.pad_token_id] = -100
-            return {"input_ids": batch, "labels": labels}
+            return {"input_ids": input_ids, "labels": labels}
 
-    def _tensorize_batch(self, examples: List[torch.Tensor]) -> torch.Tensor:
-        length_of_first = examples[0].size(0)
-        are_tensors_same_length = all(x.size(0) == length_of_first for x in examples)
+    def _tensorize_batch(self, input_ids: List[torch.Tensor]) -> torch.Tensor:
+        length_of_first = input_ids[0].size(0)
+        are_tensors_same_length = all(x.size(0) == length_of_first for x in input_ids)
         if are_tensors_same_length:
-            return torch.stack(examples, dim=0)
+            return torch.stack(input_ids, dim=0)
         else:
             if self.tokenizer._pad_token is None:
                 raise ValueError(
                     "You are attempting to pad samples but the tokenizer you are using"
                     f" ({self.tokenizer.__class__.__name__}) does not have one."
                 )
-            return pad_sequence(examples, batch_first=True, padding_value=self.tokenizer.pad_token_id)
+            return pad_sequence(input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id)
 
     def mask_tokens(self, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
