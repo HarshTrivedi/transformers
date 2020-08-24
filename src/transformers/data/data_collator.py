@@ -162,7 +162,10 @@ class DataCollatorForLanguageModeling:
             probability_matrix.masked_fill_(padding_mask, value=0.0)
 
         if self.whole_word_masking:
-            raise Exception
+            word_probability_matrix = torch.gather(input=probability_matrix, dim=1, index=wordpiece_to_word_indices)
+            masked_word_indices = torch.bernoulli(word_probability_matrix).bool()
+            masked_indices = torch.gather(input=masked_word_indices, dim=1, index=word_to_wordpiece_indices)
+            masked_indices[padding_mask] = False
         else:
             masked_indices = torch.bernoulli(probability_matrix).bool()
 
