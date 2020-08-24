@@ -78,6 +78,7 @@ class DataCollatorForLanguageModeling:
     tokenizer: PreTrainedTokenizer
     mlm: bool = True
     mlm_probability: float = 0.15
+    mask_replacement_probability: float = 0.8
     special_mlm: bool = False
     special_mlm_fraction: float = 0.0
     whole_word_masking: bool = False
@@ -172,7 +173,7 @@ class DataCollatorForLanguageModeling:
         labels[~masked_indices] = -100  # We only compute loss on masked tokens
 
         # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-        indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
+        indices_replaced = torch.bernoulli(torch.full(labels.shape, self.mask_replacement_probability)).bool() & masked_indices
         inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
 
         # 10% of the time, we replace masked input tokens with random word
