@@ -80,11 +80,15 @@ class DataCollatorForLanguageModeling:
     mlm_probability: float = 0.15
     special_mlm: bool = False
     special_mlm_fraction: float = 0.0
+    whole_word_masking: bool = False
 
     def __call__(self, examples: List[Union[torch.Tensor, Dict[str, torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+        word_starts = None
         if isinstance(examples[0], (dict, BatchEncoding)):
             input_ids = [e["input_ids"] for e in examples]
-        input_ids = self._tensorize_batch(input_ids)
+            word_starts = [e["word_starts"] for e in examples]
+        input_ids, word_to_wordpiece_indices, \
+        wordpiece_to_word_indices = self._tensorize_batch(input_ids, word_starts)
 
         if self.mlm and not self.special_mlm:
             inputs, labels = self.mask_tokens(input_ids)
@@ -93,30 +97,53 @@ class DataCollatorForLanguageModeling:
             if random.random() < self.special_mlm_fraction:
                 inputs, labels = self.mask_only_additional_special_tokens(input_ids)
             else:
-                inputs, labels = self.mask_tokens(input_ids)
+                inputs, labels = self.mask_tokens(input_ids, word_to_wordpiece_indices,
+                                                  wordpiece_to_word_indices)
             return {"input_ids": inputs, "labels": labels}
         else:
             labels = input_ids.clone().detach()
             labels[labels == self.tokenizer.pad_token_id] = -100
             return {"input_ids": input_ids, "labels": labels}
 
-    def _tensorize_batch(self, input_ids: List[torch.Tensor]) -> torch.Tensor:
+    def _tensorize_batch(self,
+                         input_ids: List[torch.Tensor],
+                         word_starts: List[torch.Tensor] = None) -> torch.Tensor:
+        if self.whole_word_masking:
+            assert word_starts is not None
+            assert all([x.shape == y.shape for x, y in zip(input_ids, word_starts)])
+
+        word_to_wordpiece_indices, wordpiece_to_word_indices = None, None
+        if self.whole_word_masking:
+            word_to_wordpiece_indices = [is_word_start.cumsum(dim=0) for is_word_start in word_starts]
+            word_to_wordpiece_indices = pad_sequence(word_to_wordpiece_indices, batch_first=True, padding_value=0)
+
+            wordpiece_to_word_indices = [is_word_start.nonzero().flatten() for is_word_start in word_starts]
+            wordpiece_to_word_indices = pad_sequence(wordpiece_to_word_indices, batch_first=True, padding_value=0)
+
+        length_of_first = input_ids[0].size(0)
+        are_tensors_same_length = all(x.size(0) == length_of_first for x in input_ids)
+
         length_of_first = input_ids[0].size(0)
         are_tensors_same_length = all(x.size(0) == length_of_first for x in input_ids)
         if are_tensors_same_length:
-            return torch.stack(input_ids, dim=0)
+            return torch.stack(input_ids, dim=0), word_to_wordpiece_indices, wordpiece_to_word_indices
         else:
             if self.tokenizer._pad_token is None:
                 raise ValueError(
                     "You are attempting to pad samples but the tokenizer you are using"
                     f" ({self.tokenizer.__class__.__name__}) does not have one."
                 )
-            return pad_sequence(input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id)
+            return pad_sequence(input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id), \
+                   word_to_wordpiece_indices, wordpiece_to_word_indices
 
-    def mask_tokens(self, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def mask_tokens(self, inputs: torch.Tensor,
+                    word_to_wordpiece_indices: torch.Tensor = None,
+                    wordpiece_to_word_indices: torch.Tensor = None) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
         """
+        if word_to_wordpiece_indices is not None:
+            assert wordpiece_to_word_indices is not None
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
@@ -133,7 +160,12 @@ class DataCollatorForLanguageModeling:
         if self.tokenizer._pad_token is not None:
             padding_mask = labels.eq(self.tokenizer.pad_token_id)
             probability_matrix.masked_fill_(padding_mask, value=0.0)
-        masked_indices = torch.bernoulli(probability_matrix).bool()
+
+        if self.whole_word_masking:
+            raise Exception
+        else:
+            masked_indices = torch.bernoulli(probability_matrix).bool()
+
         labels[~masked_indices] = -100  # We only compute loss on masked tokens
 
         # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
