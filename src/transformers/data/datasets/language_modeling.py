@@ -8,7 +8,7 @@ from filelock import FileLock
 from torch.utils.data.dataset import Dataset
 
 from ...tokenization_utils import PreTrainedTokenizer
-
+from constants import LABEL_SPECIAL_TOKENS
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +113,15 @@ class LineByLineTextDataset(Dataset):
                 if not first_non_special_encountered and not id_ in tokenizer.all_special_ids:
                     first_non_special_encountered = True
             list_word_starts.append(word_starts)
+
+        label_token_ids = []
+        for token in LABEL_SPECIAL_TOKENS:
+            id_ = tokenizer.encode(token, add_special_tokens=False)
+            assert len(id_) == 1
+            label_token_ids.append(id_[0])
+
+        for input_ids in batch_encoding["input_ids"]:
+            assert sum([input_id in label_token_ids for input_id in input_ids]) <= 1
 
         self.examples = [{"input_ids": input_ids, "word_starts": word_starts}
                           for input_ids, word_starts in zip(batch_encoding["input_ids"], list_word_starts)]
