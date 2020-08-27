@@ -178,7 +178,8 @@ class DataCollatorForLanguageModeling:
 
         # 10% of the time, we replace masked input tokens with random word
         indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
-        random_words = torch.randint(len(self.tokenizer), labels.shape, dtype=torch.long)
+        random_words_count = len(self.tokenizer) - len(self.tokenizer.all_special_ids)
+        random_words = torch.randint(random_words_count, labels.shape, dtype=torch.long)
         inputs[indices_random] = random_words[indices_random]
 
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
