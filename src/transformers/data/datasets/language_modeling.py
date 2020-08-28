@@ -94,7 +94,7 @@ class LineByLineTextDataset(Dataset):
             for line in f.read().splitlines():
                 if (len(line) > 0 and not line.isspace()):
                     if replace_separator:
-                        line = line.replace(replace_separator, tokenizer._sep_token)
+                        line = line.replace(replace_separator, str(tokenizer._sep_token))
                     lines.append(line)
 
         batch_encoding = tokenizer(lines, add_special_tokens=True, truncation=True, max_length=block_size)
