@@ -254,9 +254,11 @@ class DataCollatorForPermutationLanguageModeling:
             )
 
         if inputs.size(1) % 2 != 0:
-            raise ValueError(
-                "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see relevant comments in source code for details."
-            )
+            padding = inputs.new_ones((inputs.size(0), 1))*self.tokenizer.pad_token_id
+            inputs = torch.cat([inputs, padding], dim=-1)
+            # raise ValueError(
+            #     "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see relevant comments in source code for details."
+            # )
 
         labels = inputs.clone()
         # Creating the mask and target_mapping tensors
@@ -283,10 +285,10 @@ class DataCollatorForPermutationLanguageModeling:
             # the i-th predict corresponds to the i-th token.
             target_mapping[i] = torch.eye(labels.size(1))
 
-        special_tokens_mask = torch.tensor(
-            [self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()],
-            dtype=torch.bool,
-        )
+        special_tokens_mask = [[int(_id in self.tokenizer.all_special_ids) for _id in val]
+                               for val in labels.tolist()]
+        special_tokens_mask = torch.tensor(special_tokens_mask, dtype=torch.bool)
+
         masked_indices.masked_fill_(special_tokens_mask, value=0.0)
         if self.tokenizer._pad_token is not None:
             padding_mask = labels.eq(self.tokenizer.pad_token_id)
