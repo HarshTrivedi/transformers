@@ -81,7 +81,8 @@ class LineByLineTextDataset(Dataset):
     soon.
     """
 
-    def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int):
+    def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str,
+                 block_size: int, replace_separator: str = None):
         assert os.path.isfile(file_path)
         # Here, we do not cache the features, operating under the assumption
         # that we will soon use fast multithreaded tokenizers from the
@@ -89,24 +90,34 @@ class LineByLineTextDataset(Dataset):
         logger.info("Creating features from dataset file at %s", file_path)
 
         with open(file_path, encoding="utf-8") as f:
-            lines = [line for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
+            lines = []
+            for line in f.read().splitlines():
+                if (len(line) > 0 and not line.isspace()):
+                    if replace_separator:
+                        assert replace_separator in line
+                        line = line.replace(replace_separator, tokenizer._sep_token)
+                    lines.append(line)
 
         batch_encoding = tokenizer(lines, add_special_tokens=True, truncation=True, max_length=block_size)
 
-        # For WholeWordMasking: Hardcoded for the specific format and for Roberta:
-        # A lot of the coded is hardcoded for Roberta, so better to assure I don't change
-        assert type(tokenizer).__name__ == "RobertaTokenizer"
+
+        # For WholeWordMasking: Hardcoded for Roberta and XLNet
+        assert type(tokenizer).__name__ in ["RobertaTokenizer", "XLNetTokenizer"]
 
         list_word_starts = []
         for ids_ in batch_encoding["input_ids"]:
             word_starts = []
             first_non_special_encountered = False
             for id_ in ids_:
-                token = tokenizer._convert_id_to_token(id_)
+                token = tokenizer.convert_ids_to_tokens(id_)[0]
                 word_start = True
-                if first_non_special_encountered and \
-                   not str(token).startswith('Ġ') and id_ not in tokenizer.all_special_ids:
-                    word_start = False
+                start_special = (str(token).startswith('Ġ') if type(tokenizer).__name__ == "RobertaTokenizer" \
+                                 else str(token).startswith('▁'))
+                if not start_special and id_ not in tokenizer.all_special_ids:
+                    if type(tokenizer).__name__ == "RobertaTokenizer" and first_non_special_encountered:
+                        word_start = False
+                    if type(tokenizer).__name__ != "RobertaTokenizer":
+                        word_start = False
                 word_starts.append(word_start)
 
                 # Don't consider the first non-special token to be non-word-start
