@@ -94,7 +94,6 @@ class LineByLineTextDataset(Dataset):
             for line in f.read().splitlines():
                 if (len(line) > 0 and not line.isspace()):
                     if replace_separator:
-                        assert replace_separator in line
                         line = line.replace(replace_separator, tokenizer._sep_token)
                     lines.append(line)
 
