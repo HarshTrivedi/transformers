@@ -107,7 +107,6 @@ class DataCollatorForTokenReplacementClassification:
         special_tokens_mask = [[int(_id in self.tokenizer.all_special_ids) for _id in val]
                                for val in inputs.tolist()]
 
-        # NOTE: I haven't handled the padded tokens here. I'll need to mask the loss in the model.
         probability_matrix.masked_fill_(torch.tensor(special_tokens_mask, dtype=torch.bool), value=0.0)
         if self.tokenizer._pad_token is not None:
             padding_mask = inputs.eq(self.tokenizer.pad_token_id)
@@ -119,6 +118,7 @@ class DataCollatorForTokenReplacementClassification:
 
         inputs[replaced_indices] = random_words[replaced_indices]
         labels[replaced_indices] = 1
+        labels[padding_mask] = -100
         return inputs, labels
 
 
