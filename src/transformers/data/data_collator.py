@@ -76,7 +76,7 @@ class DataCollatorForTokenReplacementClassification:
     """
 
     tokenizer: PreTrainedTokenizer
-    replacement_probability: float = 0.15
+    dlm_probability: float = 0.15 # (dlm: for disriminative lm)
 
     def __call__(self, examples: List[Union[torch.Tensor, Dict[str, torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         if isinstance(examples[0], (dict, BatchEncoding)):
@@ -103,8 +103,7 @@ class DataCollatorForTokenReplacementClassification:
     def replace_tokens(self, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
 
         labels = torch.zeros_like(inputs)
-        # We sample a few tokens in each sequence for masked-LM training (with probability args.replacement_probability defaults to 0.15 in Bert/RoBERTa)
-        probability_matrix = torch.full(labels.shape, self.replacement_probability)
+        probability_matrix = torch.full(labels.shape, self.dlm_probability)
         special_tokens_mask = [[int(_id in self.tokenizer.all_special_ids) for _id in val]
                                for val in inputs.tolist()]
 
