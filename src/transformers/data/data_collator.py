@@ -106,8 +106,9 @@ class DataCollatorForTokenReplacementClassification:
         probability_matrix = torch.full(labels.shape, self.dlm_probability)
         special_tokens_mask = [[int(_id in self.tokenizer.all_special_ids) for _id in val]
                                for val in inputs.tolist()]
+        special_tokens_mask = torch.tensor(special_tokens_mask, dtype=torch.bool)
 
-        probability_matrix.masked_fill_(torch.tensor(special_tokens_mask, dtype=torch.bool), value=0.0)
+        probability_matrix.masked_fill_(special_tokens_mask, value=0.0)
         if self.tokenizer._pad_token is not None:
             padding_mask = inputs.eq(self.tokenizer.pad_token_id)
             probability_matrix.masked_fill_(padding_mask, value=0.0)
@@ -119,6 +120,8 @@ class DataCollatorForTokenReplacementClassification:
         inputs[replaced_indices] = random_words[replaced_indices]
         labels[replaced_indices] = 1
         labels[padding_mask] = -100
+        labels[special_tokens_mask] = -100
+
         return inputs, labels
 
 
