@@ -429,6 +429,7 @@ if is_torch_available():
         DataCollator,
         DataCollatorForLanguageModeling,
         DataCollatorForPermutationLanguageModeling,
+        DataCollatorForTokenReplacementClassification
     )
     from .data.datasets import (
         GlueDataset,
