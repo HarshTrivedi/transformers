@@ -68,6 +68,62 @@ def default_data_collator(features: List[InputDataClass]) -> Dict[str, torch.Ten
 
 
 @dataclass
+class DataCollatorForTokenReplacementClassification:
+    """
+    Data collator used for token replacement classification.
+    - collates batches of tensors, honoring their tokenizer's pad_token
+    - preprocesses batches for masked language modeling
+    """
+
+    tokenizer: PreTrainedTokenizer
+    replacement_probability: float = 0.15
+
+    def __call__(self, examples: List[Union[torch.Tensor, Dict[str, torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+        if isinstance(examples[0], (dict, BatchEncoding)):
+            input_ids = [e["input_ids"] for e in examples]
+        input_ids = self._tensorize_batch(input_ids)
+        inputs, labels = self.replace_tokens(input_ids)
+        return {"input_ids": inputs, "labels": labels}
+
+    def _tensorize_batch(self,
+                         input_ids: List[torch.Tensor]) -> torch.Tensor:
+
+        length_of_first = input_ids[0].size(0)
+        are_tensors_same_length = all(x.size(0) == length_of_first for x in input_ids)
+        if are_tensors_same_length:
+            return torch.stack(input_ids, dim=0)
+        else:
+            if self.tokenizer._pad_token is None:
+                raise ValueError(
+                    "You are attempting to pad samples but the tokenizer you are using"
+                    f" ({self.tokenizer.__class__.__name__}) does not have one."
+                )
+            return pad_sequence(input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id)
+
+    def replace_tokens(self, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+
+        labels = torch.zeros_like(inputs)
+        # We sample a few tokens in each sequence for masked-LM training (with probability args.replacement_probability defaults to 0.15 in Bert/RoBERTa)
+        probability_matrix = torch.full(labels.shape, self.replacement_probability)
+        special_tokens_mask = [[int(_id in self.tokenizer.all_special_ids) for _id in val]
+                               for val in inputs.tolist()]
+
+        # NOTE: I haven't handled the padded tokens here. I'll need to mask the loss in the model.
+        probability_matrix.masked_fill_(torch.tensor(special_tokens_mask, dtype=torch.bool), value=0.0)
+        if self.tokenizer._pad_token is not None:
+            padding_mask = inputs.eq(self.tokenizer.pad_token_id)
+            probability_matrix.masked_fill_(padding_mask, value=0.0)
+
+        replaced_indices = torch.bernoulli(probability_matrix).bool()
+        random_words_count = len(self.tokenizer) - len(self.tokenizer.all_special_ids)
+        random_words = torch.randint(random_words_count, labels.shape, dtype=torch.long)
+
+        inputs[replaced_indices] = random_words[replaced_indices]
+        labels[replaced_indices] = 1
+        return inputs, labels
+
+
+@dataclass
 class DataCollatorForLanguageModeling:
     """
     Data collator used for language modeling.
