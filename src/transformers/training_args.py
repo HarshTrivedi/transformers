@@ -239,6 +239,7 @@ class TrainingArguments:
             )
         },
     )
+    do_conditioned_mlm_profile: bool = field(default=False, metadata={"help": "tag to profile predictions of mlm (in my other code)."})
 
     @property
     def train_batch_size(self) -> int:
